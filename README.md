@@ -16,6 +16,14 @@ bots. DM it on Telegram or @-mention it on Discord: the agent runs with full
 tool access on your machine and streams its answer into a single message that
 edits in place.
 
+## Features
+
+- **Seven platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom; any number of instances (multi-account included) from one config file.
+- **Any ACP agent, per-message routing** — define several agents (harness, model, cwd) and route by platform, server, channel, user, or slash command.
+- **Native-feeling streaming** — throttled in-place edits, live tool-call bubbles, burst merging, interrupt-on-new-message; platforms without editing fall back to chunked sends measured in rendered length.
+- **The agent acts in the chat** — over a local socket it sends files, reacts, replies, opens threads, and asks blocking button questions (`agent-anywhere ask`), never touching a channel id.
+- **Small config** — five sections, typed per-platform credentials, `${VAR}` and `.env` expansion; experience tuning is frozen in code.
+
 ## Quick start
 
 ```bash
@@ -49,14 +57,6 @@ npx skills add https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g
 per agent in `agents[].cwd`); drop it to install into the current project only.
 The skill also ships inside the npm package (`agent-anywhere-cli/skill/`) if
 you prefer to copy it manually.
-
-## Features
-
-- **Seven platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom; any number of instances (multi-account included) from one config file.
-- **Any ACP agent, per-message routing** — define several agents (harness, model, cwd) and route by platform, server, channel, user, or slash command.
-- **Native-feeling streaming** — throttled in-place edits, live tool-call bubbles, burst merging, interrupt-on-new-message; platforms without editing fall back to chunked sends measured in rendered length.
-- **The agent acts in the chat** — over a local socket it sends files, reacts, replies, opens threads, and asks blocking button questions (`agent-anywhere ask`), never touching a channel id.
-- **Small config** — five sections, typed per-platform credentials, `${VAR}` and `.env` expansion; experience tuning is frozen in code.
 
 ## Platforms
 
