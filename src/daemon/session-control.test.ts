@@ -102,8 +102,8 @@ describe('SessionRegistry session control', () => {
       } as never);
     }
 
-    expect(disposed).toEqual(['discord:c:c1', 'discord:c:c1', 'discord:c:c1']);
-    expect(deleted).toEqual(['discord:c:c1', 'discord:c:c1', 'discord:c:c1']);
+    expect(disposed).toEqual(['default:discord:c:c1', 'default:discord:c:c1', 'default:discord:c:c1']);
+    expect(deleted).toEqual(['default:discord:c:c1', 'default:discord:c:c1', 'default:discord:c:c1']);
     expect(sent).toHaveLength(3);
     // '/new stuff' is NOT a clear command; it must fall through to normal routing (merger created).
     expect(() =>
@@ -117,6 +117,54 @@ describe('SessionRegistry session control', () => {
       } as never)
     ).not.toThrow();
     expect(disposed).toHaveLength(3); // unchanged — not intercepted
+  });
+
+  it('text command routing: /codex strips the prefix and gets an agent-qualified session', () => {
+    const { factory, disposed } = makeFactory();
+    const sent: string[] = [];
+    const deleted: string[] = [];
+    const platform = {
+      capabilities: { thread: false },
+      sendMessage: async (_ch: string, text: string) => {
+        sent.push(text);
+        return { channelId: _ch, messageId: 'm1' };
+      },
+    } as unknown as PlatformAdapter;
+    const store = { get: () => undefined, set: () => {}, delete: (k: string) => deleted.push(k) };
+    const cfg = {
+      ...(baseConfig as unknown as Record<string, unknown>),
+      agents: [
+        { id: 'default', harness: 'custom', command: 'x', args: [], env: {} },
+        { id: 'codex', harness: 'codex', args: [], env: {} },
+      ],
+      routing: { default: 'default', pipeline: [{ when: { command: 'codex' }, use: { agent: 'codex' } }] },
+    } as unknown as Config;
+    const reg = new SessionRegistry(cfg, new Map([['discord', platform]]), factory, clock, undefined, store as never);
+
+    // '/codex /new' — the /codex prefix is consumed by routing, so what remains ('/new') is
+    // intercepted as context clear, on codex's OWN session key (not the default agent's).
+    reg.route({
+      platform: 'discord',
+      channelId: 'c1',
+      userId: 'u1',
+      messageId: 'm1',
+      content: '/codex /new',
+      isDirect: true,
+    } as never);
+    expect(disposed).toEqual(['codex:discord:c:c1']);
+    expect(deleted).toEqual(['codex:discord:c:c1']);
+
+    // A bare '/codex' (nothing to say) is acked with usage instead of starting an empty turn.
+    reg.route({
+      platform: 'discord',
+      channelId: 'c1',
+      userId: 'u1',
+      messageId: 'm2',
+      content: '/codex',
+      isDirect: true,
+    } as never);
+    expect(sent.some((t) => t.includes('routed to agent "codex"'))).toBe(true);
+    expect(disposed).toHaveLength(1); // no extra reset — the bare command never became a turn
   });
 
   it('set/clearModelOverride do not throw, and clear reverts to the default', () => {

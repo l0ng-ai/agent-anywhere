@@ -160,11 +160,21 @@ routing:
         userId: "789"
         chat: private           # private (DM) | group | thread
         isBot: false
-        command: review         # slash command name (leading / optional)
+        command: review         # leading /name of the message text (leading / optional here)
       use:
         agent: codex
         scope: per_user         # optional per-route session-scope override
 ```
+
+`command` matches the leading `/name` of the message **text**, so it works on every
+platform — no native slash-command support needed (native slash invocations arrive as
+the same `/name input` text). When a rule matches via `command`, the router consumes
+the prefix: the agent receives only the rest (`/codex fix it` → codex gets `fix it`),
+and a bare `/name` with nothing after it is acked with a usage hint instead of
+starting a turn. Commands matching no rule pass through to the agent untouched
+(that's how agent-native commands like `/model` keep working). Sessions are keyed
+per routed agent, so `/codex …` next to default-agent chat in the same channel keeps
+two separate conversations; `/codex /new` clears codex's.
 
 ## `session.scope`
 

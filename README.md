@@ -109,8 +109,8 @@ routing:
   pipeline:                   # ordered; first match wins
     - when: { platform: telegram-bot }
       use: { agent: codex }
-    - when: { command: "/review" }
-      use: { agent: claude }
+    - when: { command: codex } # "/codex fix the tests" reaches the codex agent as "fix the tests";
+      use: { agent: codex }    # plain text parsing — works on every platform, native slash or not
 
 session:
   scope: per_channel          # per_thread|per_channel|per_user|shared

@@ -1,6 +1,6 @@
 import type { Config } from '../config/schema.js';
 import { SessionTokenRegistry } from './session-token-registry.js';
-import { resolveRoute, routeInputFromMessage, sessionKey } from './routing.js';
+import { parseTextCommand, resolveRoute, routeInputFromMessage, sessionKey } from './routing.js';
 import type { AgentCommand, InboundMessage, SessionId } from '../types.js';
 import type { PlatformAdapter } from '../platform/adapter.js';
 import type { AgentFactory } from './agent.js';
@@ -156,7 +156,16 @@ export class SessionRegistry {
 
     // Route: pick agent + scope → compute the session key.
     const route = resolveRoute(this.config, routeInputFromMessage(msg));
-    const key = sessionKey(route.scope, msg);
+    // A route matched via `when.command` consumed the leading /name: strip it so the target agent
+    // gets a clean prompt instead of trying to run /name as one of its own slash commands. This is
+    // plain text parsing, so command routing works on every platform (no native slash support needed).
+    let bareCommand: string | undefined;
+    if (route.consumedCommand) {
+      const parsed = parseTextCommand(msg.content);
+      if (parsed && !parsed.rest && !(msg.attachments?.length ?? 0)) bareCommand = parsed.name;
+      msg = { ...msg, content: parsed?.rest ?? '' };
+    }
+    const key = sessionKey(route.scope, route.agentId, msg);
 
     // Inbound response gating (a second gate over the adapter's self/channelAllowed filter:
     // bot/mention/dm/thread/ignored). Read hasActiveSession before any buildMerger, else once a merger
@@ -166,6 +175,16 @@ export class SessionRegistry {
     if (!decision.respond) {
       // Ignored messages create no merger, don't ingest, and don't bump lastActivity (no keep-alive).
       console.log(`[gate] ignoring message (${decision.reason}) ch=${msg.channelId}`);
+      return;
+    }
+
+    // A bare routing command with nothing to say (`/codex` alone, no attachments) would make an
+    // empty prompt: ack with usage instead of running a turn.
+    if (bareCommand !== undefined) {
+      void this.platforms
+        .get(msg.platform)
+        ?.sendMessage(msg.channelId, `▸ routed to agent "${route.agentId}" — send /${bareCommand} <your message>`)
+        .catch((e) => console.warn('[route] failed to ack bare command:', e instanceof Error ? e.message : e));
       return;
     }
 

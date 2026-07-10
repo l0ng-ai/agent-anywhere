@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfig, type Config } from '../config/schema.js';
-import { looksLikeCommand, resolveRoute, sessionKey, type RouteInput } from './routing.js';
+import {
+  looksLikeCommand,
+  parseTextCommand,
+  resolveRoute,
+  routeInputFromMessage,
+  sessionKey,
+  type RouteInput,
+} from './routing.js';
+import type { InboundMessage } from '../types.js';
 
 /** Build a minimal valid config with a customizable routing.pipeline. */
 function makeConfig(pipeline: unknown[], scope = 'per_channel'): Config {
@@ -26,7 +34,7 @@ describe('resolveRoute', () => {
   it('falls back to routing.default + global scope when no pipeline', () => {
     const cfg = makeConfig([], 'per_user');
     const r = resolveRoute(cfg, base);
-    expect(r).toEqual({ agentId: 'claude', scope: 'per_user' });
+    expect(r).toEqual({ agentId: 'claude', scope: 'per_user', consumedCommand: false });
   });
 
   it('the first fully-matching rule wins (platform + serverId)', () => {
@@ -48,7 +56,7 @@ describe('resolveRoute', () => {
       { when: { chat: 'private' }, use: { agent: 'codex', scope: 'per_user' } },
     ]);
     const r = resolveRoute(cfg, { ...base, isDirect: true });
-    expect(r).toEqual({ agentId: 'codex', scope: 'per_user' });
+    expect(r).toEqual({ agentId: 'codex', scope: 'per_user', consumedCommand: false });
   });
 
   it('chat kind matches private/thread/group', () => {
@@ -60,12 +68,22 @@ describe('resolveRoute', () => {
     expect(resolveRoute(cfg, base).agentId).toBe('claude'); // group ≠ thread
   });
 
-  it('a command condition matches only when triggered by that command (message routing does not match)', () => {
+  it('a command condition matches the parsed /name and marks the command consumed', () => {
     const cfg = makeConfig([
       { when: { command: '/review' }, use: { agent: 'codex' } },
     ]);
-    expect(resolveRoute(cfg, { ...base, command: 'review' }).agentId).toBe('codex'); // leading / stripped before match
-    expect(resolveRoute(cfg, base).agentId).toBe('claude'); // no command → no match
+    const hit = resolveRoute(cfg, { ...base, command: 'review' });
+    expect(hit.agentId).toBe('codex'); // leading / stripped before match
+    expect(hit.consumedCommand).toBe(true); // caller must strip the /name prefix
+    const miss = resolveRoute(cfg, base);
+    expect(miss.agentId).toBe('claude'); // no command → no match
+    expect(miss.consumedCommand).toBe(false);
+    // a different command falls through too, and the default route never consumes it
+    expect(resolveRoute(cfg, { ...base, command: 'model' })).toEqual({
+      agentId: 'claude',
+      scope: 'per_channel',
+      consumedCommand: false,
+    });
   });
 
   it('an isBot condition distinguishes bots', () => {
@@ -78,10 +96,37 @@ describe('resolveRoute', () => {
 describe('sessionKey', () => {
   const m = { platform: 'discord', channelId: 'c1', userId: 'u1' };
   it('generates stable, mutually distinct keys per scope', () => {
-    expect(sessionKey('shared', m)).toBe('shared');
-    expect(sessionKey('per_user', m)).toBe('discord:u:u1');
-    expect(sessionKey('per_channel', m)).toBe('discord:c:c1');
-    expect(sessionKey('per_thread', m)).toBe('discord:t:c1');
+    expect(sessionKey('shared', 'claude', m)).toBe('claude:shared');
+    expect(sessionKey('per_user', 'claude', m)).toBe('claude:discord:u:u1');
+    expect(sessionKey('per_channel', 'claude', m)).toBe('claude:discord:c:c1');
+    expect(sessionKey('per_thread', 'claude', m)).toBe('claude:discord:t:c1');
+  });
+
+  it('qualifies by agent: two agents addressed in the same channel get separate sessions', () => {
+    expect(sessionKey('per_channel', 'claude', m)).not.toBe(sessionKey('per_channel', 'codex', m));
+  });
+});
+
+describe('parseTextCommand / routeInputFromMessage', () => {
+  it('parses name + rest; rest is trimmed and empty for a bare command', () => {
+    expect(parseTextCommand('/codex what model are you')).toEqual({ name: 'codex', rest: 'what model are you' });
+    expect(parseTextCommand('/codex')).toEqual({ name: 'codex', rest: '' });
+    expect(parseTextCommand('  /mcp:server:cmd  args here ')).toEqual({ name: 'mcp:server:cmd', rest: 'args here' });
+    expect(parseTextCommand('hello /codex')).toBeNull();
+    expect(parseTextCommand('/')).toBeNull();
+  });
+
+  it('populates RouteInput.command from plain message text (no native slash event needed)', () => {
+    const msg = {
+      platform: 'lark',
+      channelId: 'c1',
+      userId: 'u1',
+      messageId: 'm1',
+      content: '/codex hi',
+      timestamp: 0,
+    } as InboundMessage;
+    expect(routeInputFromMessage(msg).command).toBe('codex');
+    expect(routeInputFromMessage({ ...msg, content: 'hi' }).command).toBeUndefined();
   });
 });
 
