@@ -15,6 +15,7 @@ import { createLarkProfile } from './profiles/lark.js';
 import { createQQProfile } from './profiles/qq.js';
 import { createLineProfile } from './profiles/line.js';
 import { createWecomProfile } from './profiles/wecom.js';
+import { createDingtalkProfile } from './profiles/dingtalk.js';
 
 /**
  * Platform type → profile factory. Adding a platform = one line here + a schema in
@@ -30,6 +31,7 @@ const PROFILES: Record<PlatformType, () => PlatformProfile> = {
   qq: createQQProfile,
   line: createLineProfile,
   wecom: createWecomProfile,
+  dingtalk: createDingtalkProfile,
 };
 
 /**

@@ -32,6 +32,7 @@
     "@cordisjs/plugin-http": "^0.6.0",
     "@inquirer/prompts": "^7.0.0",
     "@koishijs/plugin-adapter-discord": "^4.0.0",
+    "@satorijs/adapter-dingtalk": "^2.5.1",
     "@satorijs/adapter-lark": "^3.12.6",
     "@satorijs/adapter-line": "^2.5.0",
     "@satorijs/adapter-qq": "^4.13.0",

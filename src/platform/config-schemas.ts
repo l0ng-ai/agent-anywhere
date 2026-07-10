@@ -148,6 +148,20 @@ export const WecomConfigSchema = z.object({
   ...common,
 });
 
+export const DingtalkConfigSchema = z.object({
+  type: z.literal('dingtalk'),
+  appkey: z.string().min(1).describe('DingTalk app AppKey (Client ID)'),
+  secret: z.string().min(1).describe('DingTalk app AppSecret (Client Secret)'),
+  /** Optional AgentId; only used to resolve the bot's display name/avatar. */
+  agentId: z.number().int().optional(),
+  /** ws = Stream mode (default, no public callback) or http = webhook (POST <public host>/dingtalk; needs host/port below). */
+  protocol: z.enum(['ws', 'http']).default('ws'),
+  // http-protocol-only fields (webhook server):
+  host: z.string().optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  ...common,
+});
+
 /** All platform entry schemas, keyed by type. setup's schema-driven prompts iterate this. */
 export const PLATFORM_SCHEMAS = {
   discord: DiscordConfigSchema,
@@ -157,6 +171,7 @@ export const PLATFORM_SCHEMAS = {
   qq: QQConfigSchema,
   line: LineConfigSchema,
   wecom: WecomConfigSchema,
+  dingtalk: DingtalkConfigSchema,
 } as const;
 
 /** One entry of the `platforms:` map (discriminated on `type`). */
@@ -168,6 +183,7 @@ export const PlatformConfigSchema = z.discriminatedUnion('type', [
   QQConfigSchema,
   LineConfigSchema,
   WecomConfigSchema,
+  DingtalkConfigSchema,
 ]);
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
 export type PlatformType = PlatformConfig['type'];
@@ -185,3 +201,4 @@ export type LarkPlatformConfig = z.infer<typeof LarkConfigSchema>;
 export type QQPlatformConfig = z.infer<typeof QQConfigSchema>;
 export type LinePlatformConfig = z.infer<typeof LineConfigSchema>;
 export type WecomPlatformConfig = z.infer<typeof WecomConfigSchema>;
+export type DingtalkPlatformConfig = z.infer<typeof DingtalkConfigSchema>;

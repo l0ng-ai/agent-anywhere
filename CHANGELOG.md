@@ -18,6 +18,15 @@ All notable changes to this project are documented here. The format is based on
   ACP registry's official launch spec). Requires the opencode CLI on PATH; auth reuses its
   own login state.
 
+- **DingTalk (钉钉) platform** (`type: dingtalk`, via `@satorijs/adapter-dingtalk`): org-internal
+  robot with Stream mode by default (outbound WebSocket — no public callback URL), or
+  `protocol: http` for a classic webhook. Outbound messages are `sampleMarkdown`, with agent
+  CommonMark pre-rendered to DingTalk's markdown subset (tables→bullets, block regrouping for
+  the "single `\n` is not a line break" quirk) and sent past the adapter's escaping encoder.
+  DMs and group chats both work (group messages reach a robot only when @-mentioned, which the
+  mention gate honors). No edit/reaction/typing/buttons — streaming degrades to chunked sends,
+  and `ask` is unavailable on this platform.
+
 ### Fixed
 - **`harness: codex` actually works now**: it spawned `codex acp`, but the codex CLI has no such
   subcommand — "acp" fell into the TUI, which dies headless with "stdin is not a terminal", so

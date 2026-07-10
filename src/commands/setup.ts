@@ -22,6 +22,7 @@ const PLATFORM_NOTES: Partial<Record<PlatformType, string>> = {
   lark: 'Note: edit the yaml to change endpoint (feishu/lark) or protocol (ws/http) if needed.',
   qq: 'Note: edit the yaml to set sandbox/intents/protocol if needed.',
   line: 'Note: edit the yaml to set host/port if needed.',
+  dingtalk: 'Note: defaults to ws (Stream mode, no public URL). Edit the yaml for protocol=http (webhook at <public host>/dingtalk) with host/port.',
 };
 
 /**
@@ -85,6 +86,7 @@ export async function runSetup(): Promise<void> {
     slack: 'Slack',
     line: 'LINE',
     wecom: 'WeCom (WeChat Work)',
+    dingtalk: 'DingTalk (钉钉)',
   };
   const platformType = (await select({
     message: 'IM platform:',

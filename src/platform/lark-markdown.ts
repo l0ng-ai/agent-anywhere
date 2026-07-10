@@ -36,48 +36,9 @@
 // literal backticks — acceptable, never "broken". Flagged as an uncertainty for
 // the orchestrator at integration.
 
-/** GFM table separator row, e.g. `|---|:--:|`. At least one dash per cell. */
-const TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
-
-/** Split a GFM table row into trimmed cell strings (drops the leading/trailing empty cells from edge pipes). */
-function splitTableRow(line: string): string[] {
-  const cells = line.split('|').map((c) => c.trim());
-  if (cells.length && cells[0] === '') cells.shift();
-  if (cells.length && cells[cells.length - 1] === '') cells.pop();
-  return cells;
-}
-
-/**
- * Render a GFM table (header + separator + body rows) as Feishu-friendly bullet
- * lines, since Feishu markdown has no table primitive. Each body row becomes a
- * bold title (first cell) followed by `• Header: Value` bullets for the remaining
- * cells. Mirrors telegram-markdown.ts' renderTableBlock and hermes'
- * _render_table_block, but emits STRINGS (one element per output line) since the
- * Lark surface consumes markdown text, not h-nodes.
- *
- * Cell text is emitted verbatim: any inline markdown inside a cell (`**x**`,
- * `[a](b)`) is in the supported subset, so re-parsing would only risk breaking it.
- */
-function renderTableBlock(header: string[], rows: string[][]): string[] {
-  const lines: string[] = [];
-  for (const row of rows) {
-    // First cell is the row title (bold). Empty first cell → skip the title line.
-    // Don't re-wrap a cell that is already fully bold (`**x**`/`__x__`), or we'd
-    // emit broken `****x****`.
-    const title = row[0] ?? '';
-    if (title) {
-      const alreadyBold = /^(\*\*|__)[\s\S]+\1$/.test(title);
-      lines.push(alreadyBold ? title : `**${title}**`);
-    }
-    for (let c = 1; c < row.length; c++) {
-      const label = header[c] ?? '';
-      const value = row[c] ?? '';
-      if (!value) continue;
-      lines.push(label ? `• ${label}: ${value}` : `• ${value}`);
-    }
-  }
-  return lines;
-}
+// Table degrade (separator regex, row split, bold-title + bullets rendering) is
+// shared with dingtalk-markdown.ts — see markdown-tables.ts.
+import { TABLE_SEPARATOR_RE, splitTableRow, renderTableBlock } from './markdown-tables.js';
 
 /**
  * Convert a full CommonMark string into a Feishu markdown-subset string.

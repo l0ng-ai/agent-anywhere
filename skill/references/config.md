@@ -106,6 +106,14 @@ aesKey: <EncodingAESKey>
 selfUrl: https://example.com   # required; callback path is <selfUrl>/wecom
 host: 127.0.0.1
 port: 8080
+
+# DingTalk
+type: dingtalk
+appkey: <AppKey / Client ID>
+secret: <AppSecret / Client Secret>
+agentId: 123456           # optional; only resolves the bot's display name/avatar
+protocol: ws              # ws = Stream mode (default, no public URL) | http = webhook
+# http-only extras: host, port (DingTalk POSTs to <public host>/dingtalk)
 ```
 
 ### Fields shared by every platform entry

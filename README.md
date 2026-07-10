@@ -18,7 +18,7 @@ edits in place.
 
 ## Features
 
-- **Seven platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom; any number of instances (multi-account included) from one config file.
+- **Eight platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom, DingTalk; any number of instances (multi-account included) from one config file.
 - **Any ACP agent, per-message routing** — define several agents (harness, model, cwd) and route by platform, server, channel, user, or slash command.
 - **Native-feeling streaming** — throttled in-place edits, live tool-call bubbles, burst merging, interrupt-on-new-message; platforms without editing fall back to chunked sends measured in rendered length.
 - **The agent acts in the chat** — over a local socket it sends files, reacts, replies, opens threads, and asks blocking button questions (`agent-anywhere ask`), never touching a channel id.
@@ -69,18 +69,20 @@ you prefer to copy it manually.
 
 ## Platforms
 
-| | Discord | Telegram | Slack | Lark | QQ | LINE | WeCom |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Streaming in-place edit | ✓ | ✓ | ✓ | ✓ | – | – | – |
-| Lifecycle reactions | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
-| Typing indicator | ✓ | ✓ | – | – | – | ✓ | – |
-| Native reply | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – |
-| Threads / auto-thread | ✓ | ✓ | ✓ | – | – | – | – |
-| Buttons (`ask`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – |
-| Slash commands | ✓ | ✓ | ✓ | – | – | – | – |
+| | Discord | Telegram | Slack | Lark | QQ | LINE | WeCom | DingTalk |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Streaming in-place edit | ✓ | ✓ | ✓ | ✓ | – | – | – | – |
+| Lifecycle reactions | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – |
+| Typing indicator | ✓ | ✓ | – | – | – | ✓ | – | – |
+| Native reply | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
+| Threads / auto-thread | ✓ | ✓ | ✓ | – | – | – | – | – |
+| Buttons (`ask`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
+| Slash commands | ✓ | ✓ | ✓ | – | – | – | – | – |
 
 Outbound markdown is rendered per platform (Telegram entities, Slack mrkdwn,
-plain-text flattening for LINE/WeCom); missing capabilities degrade honestly.
+DingTalk markdown subset, plain-text flattening for LINE/WeCom); missing
+capabilities degrade honestly. DingTalk connects via Stream mode by default —
+like Slack/Lark ws mode, no public callback URL is needed.
 
 ## Configuration
 
@@ -89,7 +91,7 @@ version: 1
 
 platforms:                    # named instances; the key is the instance id
   discord-main:
-    type: discord             # discord|telegram|slack|lark|qq|line|wecom
+    type: discord             # discord|telegram|slack|lark|qq|line|wecom|dingtalk
     token: ${DISCORD_TOKEN}   # every string supports ${VAR}
     chat:
       requireMention: true    # group channels need an @mention
