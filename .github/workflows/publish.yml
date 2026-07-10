@@ -15,8 +15,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # Node 22 ships npm >= 11.5.1, the minimum for OIDC trusted publishing
-          node-version: 22
+          # OIDC trusted publishing needs npm >= 11.5.1; Node 22 still bundles npm 10.9.x,
+          # so use Node 24 (bundles npm 11.x)
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
