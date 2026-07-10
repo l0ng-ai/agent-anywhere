@@ -38,6 +38,17 @@ Authentication belongs to the agent, not the gateway: `harness: claude` reuses
 this machine's `claude /login` session by default — log in once, no API key.
 (Fine for personal use under the ToS; a multi-user service requires an API key.)
 
+### Or let your agent set it up
+
+Paste this into Claude Code (or any coding agent):
+
+```text
+Set up https://github.com/l0ng-ai/agent-anywhere for me: install the CLI
+(npm i -g agent-anywhere-cli) and its skill (npx skills add
+https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g), then follow
+the skill to configure and start it.
+```
+
 ## Agent skill
 
 The daemon already injects a one-line hint each turn so any agent can discover
