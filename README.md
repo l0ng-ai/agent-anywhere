@@ -34,8 +34,6 @@ agent-anywhere doctor   # self-check: config / credentials / ACP SDK / harness
 agent-anywhere start    # start the daemon — now message your bot
 ```
 
-From source: `git clone https://github.com/l0ng-ai/agent-anywhere.git && cd agent-anywhere && npm install && npm run build && npm install -g .`
-
 Authentication belongs to the agent, not the gateway: `harness: claude` reuses
 this machine's `claude /login` session by default — log in once, no API key.
 (Fine for personal use under the ToS; a multi-user service requires an API key.)
