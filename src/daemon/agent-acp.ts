@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { Readable, Writable } from 'node:stream';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { resolve, join, delimiter } from 'node:path';
 import { client, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type {
   ActiveSession,
@@ -23,6 +23,7 @@ import type { AgentFactory, AgentSession, AgentStreamHandlers, RunTurnInput } fr
 import { REVERSE_COMMANDS } from '../ipc/commands.js';
 import { looksLikeCommand } from './routing.js';
 import type { SessionStore } from './session-store.js';
+import { ensureReverseCliShim } from './reverse-cli-shim.js';
 
 /**
  * AgentFactory's ACP (Agent Client Protocol) implementation on the official @agentclientprotocol/sdk.
@@ -233,6 +234,10 @@ function createAcpSession(
     for (const [k, v] of Object.entries(def.env)) env[k] = expandEnv(v);
     env.AGENT_ANYWHERE_TURN_TOKEN = sessionToken;
     env.AGENT_ANYWHERE_SOCKET = socketPath;
+    // Guarantee the reverse CLI the hint promises: prepend the self-provisioned shim dir so
+    // `agent-anywhere` resolves to THIS daemon's own entry regardless of launch mode (see reverse-cli-shim).
+    const shimDir = ensureReverseCliShim();
+    if (shimDir) env.PATH = `${shimDir}${delimiter}${env.PATH ?? ''}`;
 
     const child = spawn(command, args, { cwd, env });
     // Record proc immediately so the 'exit' callback and start-failure dispose can match by reference and

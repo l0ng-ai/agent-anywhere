@@ -25,13 +25,14 @@ edits in place.
 ## Quick start
 
 ```bash
-git clone https://github.com/l0ng-ai/agent-anywhere.git && cd agent-anywhere
-npm install && npm run build
+npm install -g agent-anywhere
 
-npx agent-anywhere setup    # wizard: pick platform, paste credentials, choose the agent
-npx agent-anywhere doctor   # self-check: config / credentials / ACP SDK / harness
-npx agent-anywhere start    # start the daemon — now message your bot
+agent-anywhere setup    # wizard: pick platform, paste credentials, choose the agent
+agent-anywhere doctor   # self-check: config / credentials / ACP SDK / harness
+agent-anywhere start    # start the daemon — now message your bot
 ```
+
+From source: `git clone https://github.com/l0ng-ai/agent-anywhere.git && cd agent-anywhere && npm install && npm run build && npm install -g .`
 
 Authentication belongs to the agent, not the gateway: `harness: claude` reuses
 this machine's `claude /login` session by default — log in once, no API key.

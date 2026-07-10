@@ -4,6 +4,7 @@ import { Daemon } from '../daemon/daemon.js';
 import { createPlatformAdapters } from '../platform/platform-factory.js';
 import { createAcpAgentFactory } from '../daemon/agent-acp.js';
 import { SessionStore } from '../daemon/session-store.js';
+import { ensureReverseCliShim } from '../daemon/reverse-cli-shim.js';
 
 /**
  * `agent-anywhere start` — default command. Read config -> build platform adapter + agent factory -> start the daemon.
@@ -21,6 +22,10 @@ export async function runStart(): Promise<void> {
 
   const cfg = loadConfig();
   const socket = resolveSocketPath(cfg);
+
+  // Provision the reverse-CLI shim up front (agent-acp refreshes it per spawn): fail loudly at
+  // startup rather than on the agent's first `agent-anywhere` call.
+  ensureReverseCliShim();
 
   // One adapter per configured platform instance; the daemon drives them all.
   const platforms = await createPlatformAdapters(cfg.platforms);

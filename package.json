@@ -23,7 +23,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
-    "start": "node dist/cli.js start"
+    "start": "node dist/cli.js start",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.58.1",
@@ -57,5 +58,30 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/l0ng-ai/agent-anywhere.git"
+  },
+  "homepage": "https://github.com/l0ng-ai/agent-anywhere#readme",
+  "bugs": {
+    "url": "https://github.com/l0ng-ai/agent-anywhere/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "acp",
+    "agent",
+    "telegram",
+    "discord",
+    "slack",
+    "feishu",
+    "lark",
+    "qq",
+    "line",
+    "wecom",
+    "chatbot",
+    "gateway",
+    "koishi",
+    "satori"
+  ]
 }
