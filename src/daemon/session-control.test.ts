@@ -21,7 +21,10 @@ const baseConfig = {
   routing: { default: 'default', pipeline: [] },
   session: { scope: 'per_channel', maxPerThread: 5 },
   access: { allowFrom: [], admin: [] },
-  inbound: { gating: { respondInDirect: true, threadParticipationExempt: true } },
+  inbound: {
+    gating: { respondInDirect: true, threadParticipationExempt: true },
+    reactions: { received: '👀', done: '✅', error: '❌' },
+  },
 } as unknown as Config;
 
 const stubPlatform = {
