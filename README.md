@@ -10,7 +10,7 @@
 </div>
 
 Agent Anywhere is a gateway daemon that puts a coding agent — Claude Code,
-Gemini CLI, Codex, OpenCode, or anything speaking the
+Codex, OpenCode, or anything speaking the
 [Agent Client Protocol](https://agentclientprotocol.com) — behind your chat
 bots. DM it on Telegram or @-mention it on Discord: the agent runs with full
 tool access on your machine and streams its answer into a single message that
@@ -67,6 +67,24 @@ per agent in `agents[].cwd`); drop it to install into the current project only.
 The skill also ships inside the npm package (`agent-anywhere-cli/skill/`) if
 you prefer to copy it manually.
 
+## Agents
+
+| Harness | Launches | Extra install | Auth |
+|---|---|---|---|
+| `claude` | bundled [claude-agent-acp](https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp) adapter | none — ships with the package | reuses `claude /login`; `ANTHROPIC_API_KEY` if set |
+| `codex` | bundled [codex-acp](https://www.npmjs.com/package/@zed-industries/codex-acp) adapter | none — ships with the package | reuses the Codex CLI's login (`~/.codex`) |
+| `opencode` | `opencode acp` | OpenCode CLI on PATH | OpenCode's own login |
+| `custom` | your `command` + `args` | any ACP-speaking executable | whatever your agent uses |
+
+Every harness gets the same treatment: per-agent `cwd`, `env`, and `args`
+(harness-specific switches go in `args`); `model` is passed best-effort at
+session creation — whether it takes effect depends on the harness. Optional
+ACP capabilities degrade per agent: sessions persist across daemon restarts
+where the adapter supports `session/load`, and agents that advertise their
+slash commands (`available_commands_update`) get them registered as native
+platform commands. `agent-anywhere doctor` verifies each configured harness is
+reachable and reports the auth method in use.
+
 ## Platforms
 
 | | Discord | Telegram | Slack | Lark | QQ | LINE | WeCom | DingTalk |
@@ -101,7 +119,7 @@ platforms:                    # named instances; the key is the instance id
 
 agents:                       # at least one; routing picks by id
   - id: claude
-    harness: claude           # claude|gemini|codex|opencode|custom
+    harness: claude           # claude|codex|opencode|custom
     cwd: ~/projects/main
   - id: codex
     harness: codex
