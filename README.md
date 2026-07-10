@@ -25,7 +25,7 @@ edits in place.
 ## Quick start
 
 ```bash
-npm install -g agent-anywhere
+npm install -g agent-anywhere-cli
 
 agent-anywhere setup    # wizard: pick platform, paste credentials, choose the agent
 agent-anywhere doctor   # self-check: config / credentials / ACP SDK / harness
