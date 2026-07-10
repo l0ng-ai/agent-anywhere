@@ -1,0 +1,61 @@
+{
+  "name": "agent-anywhere",
+  "version": "0.1.0",
+  "license": "MIT",
+  "comments": {
+    "pinnedDeps": "@satorijs/adapter-slack and @satorijs/core are pinned to exact versions: the Slack profile relies on their undocumented internal behavior (see the header comment in src/platform/profiles/slack.ts). Before upgrading either, you must manually regress Slack button/slash reception—no CI covers this path."
+  },
+  "description": "A gateway CLI that connects Claude Code to IM platforms: Koishi for inbound/outbound + claude agent sdk for processing, with streaming replies aligned to the hermes experience",
+  "type": "module",
+  "bin": {
+    "agent-anywhere": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skill"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "dev:watch": "tsx watch src/cli.ts start",
+    "stop": "node scripts/stop.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "start": "node dist/cli.js start"
+  },
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.58.1",
+    "@agentclientprotocol/sdk": "0.29.0",
+    "@cordisjs/plugin-http": "^0.6.0",
+    "@inquirer/prompts": "^7.0.0",
+    "@koishijs/plugin-adapter-discord": "^4.0.0",
+    "@satorijs/adapter-lark": "^3.12.6",
+    "@satorijs/adapter-line": "^2.5.0",
+    "@satorijs/adapter-qq": "^4.13.0",
+    "@satorijs/adapter-slack": "2.5.0",
+    "@satorijs/adapter-telegram": "^4.5.11",
+    "@satorijs/adapter-wecom": "^2.5.0",
+    "@satorijs/core": "4.6.0",
+    "@toon-format/toon": "^2.3.0",
+    "commander": "^12.0.0",
+    "https-proxy-agent": "^7.0.6",
+    "picocolors": "^1.1.0",
+    "undici": "^6.27.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^9.39.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.62.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

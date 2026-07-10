@@ -1,0 +1,469 @@
+// Telegram PlatformProfile: all Telegram-specific logic.
+// Import from @satorijs/core (not the koishi umbrella) for the same reason as discord.ts:
+// the umbrella eagerly pulls in @koishijs/loader (ESM interop bug). adapter-telegram builds
+// on @satorijs/core, so using it directly avoids Context nominal friction.
+//
+// Adapter behaviors relied on (verified against adapter src/.d.ts + lib/index.cjs):
+// - TelegramBot.inject=['http'] (even for polling), so install must ctx.plugin(HttpService) first.
+// - reply: <quote id=...> -> reply_to_message_id (message.ts 'quote' branch).
+// - buttons: <button id=X>label</button> -> inline keyboard callback_data:X; click arrives via
+//   'interaction/button' (session.event.button.id===callback_data); adapter auto-answers the
+//   callback query. callback_data is capped at 64 bytes.
+// - slash: bot.updateCommands -> internal.setMyCommands (gated by config.slash). Inbound
+//   /cmd@bot args arrives as 'interaction/command' with session.content rewritten to
+//   `command + rest` and NO structured argv.options -- must split from content ourselves.
+// - reaction: adapter does not wrap setMessageReaction, but bot.http is exposed, so the profile
+//   POSTs directly; remove sends an empty array. emoji is restricted to a fixed allow-set.
+import { h } from '@satorijs/core';
+import TelegramAdapter from '@satorijs/adapter-telegram';
+import type { Session, Universal } from '@satorijs/core';
+
+import type { SlashCommandSpec } from '../../types.js';
+import type { PlatformCapabilities } from '../adapter.js';
+import type { PlatformProfile } from '../profile.js';
+import type { TelegramPlatformConfig } from '../config-schemas.js';
+import {
+  deferUntilLogin,
+  installHttpService,
+  mountSatoriButtonInteraction,
+  resolveDefaultPlugin,
+  sendForRef,
+  splitCompositeChannel,
+} from '../profile-helpers.js';
+import {
+  renderTelegramMarkdown,
+  fragmentToTelegramHtml,
+  telegramVisibleLength,
+} from '../telegram-markdown.js';
+
+/**
+ * Normalize any command name to a valid Telegram BotCommand name: `[a-z0-9_]`, length 1-32.
+ *
+ * setMyCommands only accepts `[a-z0-9_]`. adapter.updateCommands does toLowerCase + replace
+ * non-\w with `_`, but does NOT dedupe: e.g. `add-dir` and an existing `add_dir` both normalize
+ * to `add_dir`, and two duplicate names make the whole setMyCommands batch fail with 400. So we
+ * normalize and dedupe up front -- not relying on adapter behavior, and guarding against dupes.
+ * Normalization is idempotent (already-valid names pass through unchanged).
+ */
+function normalizeTelegramCommandName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .slice(0, 32);
+}
+
+/**
+ * Map SlashCommandSpec[] to Universal.Command[] (pure, for unit testing).
+ *
+ * Telegram's updateCommands reads only command.name and command.description (for setMyCommands)
+ * and does NOT consume options/arguments (Telegram bot commands have no structured params).
+ * So options stay empty, purely to satisfy the Universal.Command shape. Description uses the
+ * default locale key ''.
+ *
+ * Names are normalized to `[a-z0-9_]`<=32 then deduped by normalized name (first wins), to avoid
+ * add-dir / add_dir colliding and failing the whole batch with 400. Defensively drop entries that
+ * normalize to an empty string.
+ */
+export function specsToTelegramCommands(cmds: SlashCommandSpec[]): Universal.Command[] {
+  const seen = new Set<string>();
+  const out: Universal.Command[] = [];
+  for (const cmd of cmds) {
+    const name = normalizeTelegramCommandName(cmd.name);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push({
+      name,
+      description: { '': cmd.description },
+      arguments: [],
+      options: [],
+      children: [],
+    });
+  }
+  return out;
+}
+
+/**
+ * Safely encode a button id into callback_data (Telegram hard-caps it at 64 bytes, UTF-8).
+ * Most ids are well under 64; over-long ones fall back to prefix + djb2 hash tail, giving a
+ * stable id that fits the limit and round-trips identically on click.
+ */
+export function encodeCallbackData(id: string): string {
+  // callback_data is limited by bytes, not characters.
+  const byteLen = (s: string): number => Buffer.byteLength(s, 'utf8');
+  if (byteLen(id) <= 64) return id;
+  // djb2 hash (deterministic, dependency-free), 8 hex chars.
+  let hash = 5381;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 33) ^ id.charCodeAt(i);
+  }
+  const suffix = '#' + (hash >>> 0).toString(16).padStart(8, '0'); // 9 bytes
+  // Trim the prefix byte-by-byte until prefix + suffix fits in 64 bytes.
+  let prefix = id;
+  while (byteLen(prefix) + byteLen(suffix) > 64) {
+    prefix = prefix.slice(0, -1);
+  }
+  return prefix + suffix;
+}
+
+/**
+ * Narrowed view of TelegramBot internals (the @satorijs/core Bot base exposes no internal/http).
+ * - internal.createForumTopic / internal.sendMessage: adapter-wrapped, already unwrapping the
+ *   Telegram envelope's `.result` (returns the ForumTopic / Message body, not `{ ok, result }`).
+ * - http.post: adapter does not wrap setMessageReaction (Internal is a fixed allow-list), so
+ *   reaction hits raw http; its response is the raw `{ ok, result }` envelope, but we don't read it.
+ */
+interface TelegramInternal {
+  createForumTopic(payload: {
+    chat_id: string | number;
+    name: string;
+  }): Promise<{ message_thread_id: number; name: string }>;
+  sendMessage(payload: {
+    chat_id: string | number;
+    message_thread_id?: number;
+    text: string;
+    parse_mode?: string;
+  }): Promise<{ message_id?: number }>;
+  editMessageText(payload: {
+    chat_id: string | number;
+    message_id: number;
+    text: string;
+    parse_mode?: string;
+  }): Promise<unknown>;
+}
+
+/** bot.http view: used only by reaction (adapter does not wrap setMessageReaction). */
+interface TelegramHttp {
+  post(url: string, body: unknown): Promise<unknown>;
+}
+
+/**
+ * Decode a composite channelId (pure, for unit testing).
+ *
+ * Forum-topic threads carry the `chat + topic` pair as `<chatId>:<topicId>` (both numeric, so
+ * the `:` split is safe). Composite: split on the first `:` into real chatId + topicId
+ * (message_thread_id). Plain (no `:`): the whole string is chatId, topicId undefined.
+ * edit/react only need chat_id + message_id, so they use this just to extract chatId.
+ *
+ * Known gap: satori-core's deleteMessage / fetchHistory do NOT go through profile overrides and
+ * pass channelId straight to bot.deleteMessage / bot.getMessageList. Our sendMessage override
+ * returns a real (non-composite) chatId, so autoThread-generated refs never carry a composite
+ * key; only directly using createThread's composite threadId for delete/fetchHistory would hit
+ * one (a rare path). Properly supporting it needs core-side decoding or override seams; deferred.
+ */
+export function decodeChannel(channelId: string): { chatId: string; topicId?: string } {
+  const { head, tail } = splitCompositeChannel(channelId);
+  return { chatId: head, topicId: tail };
+}
+
+/**
+ * Telegram reactions are limited to a fixed allow-set (setMessageReaction's reaction[].emoji only
+ * accepts the emoji listed in the Bot API docs). Lifecycle ✅/❌ are not in the set, so map them
+ * to the nearest allowed emoji. Unmapped emoji pass through and are rejected by the Bot API
+ * (swallowed by inbound-merger's safeReaction try/catch, no crash). Pure, for unit testing.
+ */
+export function mapTelegramReactionEmoji(emoji: string): string {
+  const TG_REACTION_FALLBACK: Record<string, string> = {
+    '✅': '👌', // lifecycle "done" -> nearest allowed emoji
+    '❌': '👎', // lifecycle "fail" -> nearest allowed emoji
+    // 👀 is already in Telegram's allow-set, so it passes through unmapped.
+  };
+  return TG_REACTION_FALLBACK[emoji] ?? emoji;
+}
+
+/**
+ * Telegram profile instance. Selected by createSatoriAdapter per cfg.platform.type.
+ */
+export function createTelegramProfile(): PlatformProfile<TelegramPlatformConfig> {
+  // reaction: adapter doesn't wrap setMessageReaction, but bot.http is exposed, so the profile
+  //   POSTs raw http; emoji are mapped to the allow-set via mapTelegramReactionEmoji.
+  // thread: Telegram forum topic. A topic isn't a standalone channelId but a
+  //   `chat + message_thread_id` pair, carried in agent-anywhere's single-channelId model via the
+  //   composite `<chatId>:<topicId>` (see decodeChannel). Inbound isThread is constrained by the
+  //   adapter (channelId is a bare topic_id, see isThread).
+  // maxMessageLength=4096 (Telegram's real limit, counted on the ENTITY-PARSED visible text; HTML
+  // tags do NOT count). renderTelegramMarkdown can expand the visible length (table -> bullets,
+  // ~1.4x), which previously overflowed because chunking ran on raw chars. measureRendered (below)
+  // reports the true visible length so the StreamBuffer chunks against the real 4096 with no headroom hack.
+  const capabilities: PlatformCapabilities = {
+    editMessage: true,
+    reaction: true,
+    typing: true,
+    maxMessageLength: 4096,
+    reply: true,
+    thread: true,
+    buttons: true,
+    slashCommands: true,
+    maxSlashCommands: 100, // Telegram setMyCommands limit (names allow only [a-z0-9_], see registerCommands)
+  };
+
+  return {
+    type: 'telegram',
+    satoriPlatform: 'telegram',
+    capabilities,
+
+    // Telegram counts the entity-parsed visible text; table→bullets rendering can expand it, so the
+    // chunker must measure the rendered visible length, not the raw markdown char count.
+    measureRendered: telegramVisibleLength,
+
+    install(ctx, platform) {
+      // TelegramBot.inject=['http'] (even for polling): http service must be provided first, or
+      // cordis silently stalls the telegram plugin and never instantiates the bot (no bot, no error).
+      installHttpService(ctx);
+
+      // protocol 'polling' avoids needing a public selfUrl. slash forwards platform.slash;
+      // when false, updateCommands returns immediately.
+      ctx.plugin(resolveDefaultPlugin(TelegramAdapter), {
+        protocol: 'polling',
+        token: platform.token,
+        slash: platform.slash,
+      });
+    },
+
+    detectMention(session, selfId) {
+      // Telegram has two mention forms (see adapter utils decodeMessage/parseText):
+      //  1) @botusername (mention entity) -> h('at',{name}) with no id; match at.name === bot.user.name.
+      //  2) text_mention entity -> h('at',{id,name}); match id===selfId.
+      // Replying to the bot's own message (session.quote.user.id === selfId) also counts.
+      // selfId is the numeric prefix of the token (bot.selfId); bot.user.name is the username.
+      const botName = (session.bot?.user as { name?: string } | undefined)?.name;
+
+      const quoteUserId = (session.quote?.user as { id?: string } | undefined)?.id;
+      if (selfId && quoteUserId && quoteUserId === selfId) return true;
+
+      const elements = session.elements;
+      if (!elements) return false;
+      for (const node of elements) {
+        if (node.type !== 'at') continue;
+        const atId = node.attrs?.id as string | undefined;
+        const atName = node.attrs?.name as string | undefined;
+        if (selfId && atId && atId === selfId) return true; // text_mention path
+        if (botName && atName && atName === botName) return true; // @username path
+      }
+      return false;
+    },
+
+    isDirect(session) {
+      return session.isDirect ?? false;
+    },
+
+    isThread(session) {
+      // Inbound forum-topic detection. The adapter sets a forum-topic message's channel.id to the
+      // BARE message_thread_id (dropping chat id) while guild.id stays the chat id (adapter
+      // utils.ts decodeMessage). So a topic message has guildId(chat) !== channelId(bare topic_id)
+      // and is non-direct; a normal group message has channel.id==chat.id==guild.id (equal), and
+      // DMs are isDirect.
+      //
+      // Known limitation: inbound channelId is the BARE topic_id (not the composite
+      // `<chatId>:<topicId>`), so it does not align with the outbound composite model -- replying
+      // directly with session.channelId would target the wrong place (missing chat id). Rebuilding
+      // the composite is a structural change, deferred.
+      const guildId = session.guildId;
+      const channelId = session.channelId;
+      return Boolean(guildId && channelId && guildId !== channelId && !session.isDirect);
+    },
+
+    attachmentMeta() {
+      // Telegram element attrs come from $getFileFromId, which gives only a temporary src
+      // (+ document filename) with NO mime/size. Return empty; the download/inject layer falls
+      // back to HTTP content-type and extension.
+      return {};
+    },
+
+    async reply(bot, ref, text) {
+      // <quote id=...> -> reply_to_message_id, i.e. Telegram's native quoted reply. The body is
+      // markdown-rendered to Satori nodes (bold/code/links/etc.) before the quote element.
+      return sendForRef(
+        bot,
+        ref.channelId,
+        [h('quote', { id: ref.messageId }), ...renderTelegramMarkdown(text)],
+        'telegram',
+        'reply'
+      );
+    },
+
+    async createThread(bot, ref, name) {
+      // createForumTopic returns an already-unwrapped ForumTopic { message_thread_id, ... }.
+      // Forum topics work ONLY in topic-enabled supergroups; normal groups/DMs are rejected by the
+      // Bot API (throws), and the upstream autoThread catches and falls back. There is no
+      // startThreadFromMessage semantics, so we build the topic from chat_id alone. Returns the
+      // composite threadId `<chatId>:<topicId>`; sendMessage later decodes message_thread_id from it.
+      const internal = bot.internal as unknown as TelegramInternal;
+      const topic = await internal.createForumTopic({ chat_id: ref.channelId, name });
+      const topicId = topic?.message_thread_id;
+      if (topicId == null) {
+        throw new Error(`[telegram] createForumTopic did not return a message_thread_id (chat=${ref.channelId})`);
+      }
+      return { threadId: `${ref.channelId}:${topicId}` };
+    },
+
+    async sendMessage(bot, channelId, text) {
+      // Outbound override: special handling only when channelId is composite `<chatId>:<topicId>` --
+      // decode message_thread_id and send into the topic via internal.sendMessage (which returns an
+      // already-unwrapped Message). The returned ref uses the REAL chatId (non-composite), so later
+      // edit/react on topic messages (which only need chat_id+message_id) take the generic path.
+      // Non-composite channelId falls back to the generic bot.sendMessage, taking the first id.
+      // Both the plain and forum-topic paths post via raw internal.sendMessage with a pre-rendered
+      // Telegram-HTML string + parse_mode=HTML. We deliberately bypass the Satori MessageEncoder here
+      // so that send and edit produce byte-identical output: the adapter's editMessage stringifies the
+      // fragment (h.normalize(content).join('')) instead of visiting it — that path leaks Satori-only
+      // tags (<br/>, <code-block>) as literal HTML and drops newlines after a closing tag, both of
+      // which Telegram rejects/garbles. Rendering to HTML ourselves (fragmentToTelegramHtml) and editing
+      // via internal.editMessageText keeps the streaming first-send and subsequent-edits consistent.
+      const { chatId, topicId } = decodeChannel(channelId);
+      const internal = bot.internal as unknown as TelegramInternal;
+      const msg = await internal.sendMessage({
+        chat_id: chatId,
+        ...(topicId != null ? { message_thread_id: Number(topicId) } : {}),
+        text: fragmentToTelegramHtml(renderTelegramMarkdown(text)),
+        parse_mode: 'HTML',
+      });
+      const messageId = msg?.message_id;
+      if (messageId == null) {
+        throw new Error(`[telegram] sendMessage did not return a message id (channel=${channelId})`);
+      }
+      // ref uses the real chatId so later edit/react take the chat_id+message_id path.
+      return { channelId: chatId, messageId: String(messageId) };
+    },
+
+    async addReaction(bot, ref, emoji) {
+      // adapter doesn't define setMessageReaction (internal is a fixed allow-list), so hit raw http.
+      // bot.http's base is already the Bot API root, hence the '/setMessageReaction' path. emoji is
+      // mapped to the allow-set; anything still unaccepted is rejected by the API (swallowed by the
+      // upstream safeReaction). message_id must be numeric. Defensive decode: ref.channelId should
+      // already be the real chatId, but decoding is safe if a composite key arrives.
+      const mapped = mapTelegramReactionEmoji(emoji);
+      const { chatId } = decodeChannel(ref.channelId);
+      const http = (bot as unknown as { http: TelegramHttp }).http;
+      await http.post('/setMessageReaction', {
+        chat_id: chatId,
+        message_id: Number(ref.messageId),
+        reaction: [{ type: 'emoji', emoji: mapped }],
+      });
+    },
+
+    async removeReaction(bot, ref, _emoji) {
+      // Telegram has no "remove by emoji" semantics: setMessageReaction with an empty array clears
+      // all of this bot's reactions. Hence _emoji is ignored (signature matches profile.ts / lark).
+      const { chatId } = decodeChannel(ref.channelId);
+      const http = (bot as unknown as { http: TelegramHttp }).http;
+      await http.post('/setMessageReaction', {
+        chat_id: chatId,
+        message_id: Number(ref.messageId),
+        reaction: [],
+      });
+    },
+
+    async editMessage(bot, ref, text) {
+      // Edit via raw internal.editMessageText with a pre-rendered Telegram-HTML string, mirroring
+      // sendMessage. We avoid bot.editMessage (Satori's generic edit) because it stringifies the
+      // fragment without visiting it, leaking Satori-only tags (<br/>, <code-block>) and dropping
+      // newlines after closing tags. Defensive decode in case ref.channelId is a composite key
+      // (normally sendMessage already returns the real chatId).
+      const { chatId } = decodeChannel(ref.channelId);
+      const internal = bot.internal as unknown as TelegramInternal;
+      await internal.editMessageText({
+        chat_id: chatId,
+        message_id: Number(ref.messageId),
+        text: fragmentToTelegramHtml(renderTelegramMarkdown(text)),
+        parse_mode: 'HTML',
+      });
+    },
+
+    async sendButtons(bot, channelId, text, buttons) {
+      // h('button',{id}) without a type makes callback_data===id. callback_data is capped at 64
+      // bytes, so encodeCallbackData encodes safely (truncate + hash); on click,
+      // session.event.button.id is this encoded value, which mountButtonEvents echoes back -- closing the loop.
+      const group = h(
+        'button-group',
+        {},
+        buttons.map((b) => h('button', { id: encodeCallbackData(b.id) }, b.label))
+      );
+      // Markdown-render the leading text, then append the inline-keyboard group (renderTelegramMarkdown
+      // returns [] for empty text, so this also covers the no-text case).
+      return sendForRef(
+        bot,
+        channelId,
+        [...renderTelegramMarkdown(text), group],
+        'telegram',
+        'sendButtons'
+      );
+    },
+
+    async typing(bot, channelId) {
+      // internal.sendChatAction auto-expires after ~5s with no stop (core's stopTyping is a no-op).
+      // channelId may be composite (topic case), so decode and use the real chatId plus
+      // message_thread_id; otherwise typing lands on the wrong chat or misses the topic.
+      const { chatId, topicId } = decodeChannel(channelId);
+      const internal = bot.internal as
+        | {
+            sendChatAction?: (payload: {
+              chat_id: string;
+              action: string;
+              message_thread_id?: number;
+            }) => Promise<unknown>;
+          }
+        | undefined;
+      await internal?.sendChatAction?.({
+        chat_id: chatId,
+        action: 'typing',
+        ...(topicId != null ? { message_thread_id: Number(topicId) } : {}),
+      });
+    },
+
+    async registerCommands(ctx, getBot, cmds) {
+      // setMyCommands registration (global; Telegram commands have no guild-level scope, so
+      // opts.guildId is ignored). Defer until login via deferUntilLogin. Telegram has no selfId
+      // prerequisite (updateCommands doesn't need application_id), so the default isReady applies.
+      const universalCmds = specsToTelegramCommands(cmds);
+      deferUntilLogin(ctx, getBot, async (bot) => {
+        try {
+          // bot.updateCommands -> internal.setMyCommands (gated by config.slash).
+          await bot.updateCommands(universalCmds);
+        } catch (e) {
+          console.error('[slash] telegram registration failed:', e instanceof Error ? e.message : e);
+        }
+      });
+    },
+
+    mountButtonEvents(ctx, emit) {
+      // callback_query -> 'interaction/button'; adapter auto-answers the callback query.
+      // session.event.button.id === callback_data (the encodeCallbackData'd id from send).
+      mountSatoriButtonInteraction(ctx, 'telegram', emit);
+    },
+
+    mountCommandEvents(ctx, emit) {
+      // /cmd@bot args -> 'interaction/command'; the adapter rewrites session.content to
+      // `command + rest` with NO structured argv.options. So split from content ourselves:
+      // first token is the command name, the rest become positional { arg0, arg1, ... } (no
+      // named schema available).
+      ctx.on('interaction/command', (session: Session) => {
+        const content = (session.content ?? '').trim();
+        if (!content) return;
+        const parts = content.split(/\s+/);
+        const name = parts[0];
+        if (!name) return;
+        const rest = parts.slice(1);
+        const options: Record<string, unknown> = {};
+        rest.forEach((v, i) => {
+          options[`arg${i}`] = v;
+        });
+        // raw text after the command name, for upstream whole-string parsing.
+        options.raw = content.slice(name.length).trim();
+
+        // Telegram slash is just a normal message, no followup token, so reply straight to the
+        // channel. (This Satori version's Session has no .send; use bot.sendMessage.)
+        const bot = session.bot;
+        const channelId = session.channelId ?? '';
+        emit({
+          platform: 'telegram',
+          channelId,
+          userId: session.userId ?? '',
+          messageId: session.messageId ?? '',
+          name,
+          options,
+          reply: (text: string) => bot.sendMessage(channelId, text).then(() => undefined),
+        });
+      });
+    },
+  };
+}
