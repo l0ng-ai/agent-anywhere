@@ -98,6 +98,20 @@ export function resolveClaudeAdapterEntry(): string {
   return createRequire(import.meta.url).resolve('@agentclientprotocol/claude-agent-acp/dist/index.js');
 }
 
+/**
+ * Native binary of Zed's codex-acp adapter (a declared dependency; the platform binary arrives via
+ * its optionalDependencies). Resolved directly instead of going through the package's node bin
+ * wrapper: the wrapper spawnSync-execs this same binary, adding a process layer that can orphan
+ * the child when the daemon kills the agent. Exported for the doctor check; throws when the
+ * platform package is missing (unsupported platform or incomplete npm install).
+ */
+export function resolveCodexAdapterEntry(): string {
+  const bin = process.platform === 'win32' ? 'codex-acp.exe' : 'codex-acp';
+  return createRequire(import.meta.url).resolve(
+    `@zed-industries/codex-acp-${process.platform}-${process.arch}/bin/${bin}`
+  );
+}
+
 /** Resolve an agent def into the actual spawn command + args (presets default; custom self-configures; then append def.args). */
 function resolveHarness(def: AgentDef): { command: string; args: string[] } {
   switch (def.harness) {
@@ -111,8 +125,10 @@ function resolveHarness(def: AgentDef): { command: string; args: string[] } {
       // Gemini CLI native ACP (exact flag per `gemini --help`; override/extend via def.args).
       return { command: 'gemini', args: ['--experimental-acp', ...def.args] };
     case 'codex':
-      // Codex ACP subcommand (best-effort, per its docs; if unavailable, configure command via custom).
-      return { command: 'codex', args: ['acp', ...def.args] };
+      // Codex via Zed's codex-acp adapter (the codex CLI itself has no ACP mode — a bare
+      // `codex acp` falls into the TUI and dies with "stdin is not a terminal" when headless).
+      // Auth reuses the codex CLI's own login state (~/.codex).
+      return { command: resolveCodexAdapterEntry(), args: [...def.args] };
     case 'custom':
       // refine already guarantees command exists.
       return { command: def.command!, args: [...def.args] };

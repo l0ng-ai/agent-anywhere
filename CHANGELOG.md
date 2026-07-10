@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Text command routing**: `routing.pipeline` rules with `when.command` now match the leading
+  `/name` of plain message text, so command routing works on every platform — no native
+  slash-command support needed (previously `when.command` could never match: the command field
+  was never populated on the message path). A rule that matches via `command` consumes the
+  prefix — the routed agent receives only the rest of the message — and a bare `/name` is
+  acked with a usage hint instead of starting an empty turn. Commands matching no rule still
+  pass through to the agent untouched (`/model` etc. keep working).
+
+### Fixed
+- **`harness: codex` actually works now**: it spawned `codex acp`, but the codex CLI has no such
+  subcommand — "acp" fell into the TUI, which dies headless with "stdin is not a terminal", so
+  every turn failed with "ACP connection closed". The harness now spawns Zed's
+  [codex-acp](https://www.npmjs.com/package/@zed-industries/codex-acp) adapter (a declared
+  dependency, platform binary resolved directly); auth reuses the codex CLI's own login state.
+
+### Changed
+- **Session keys are agent-qualified** (`<agentId>:<platform>:c:<channelId>` …): two agents
+  addressed in the same channel/user/thread scope keep separate conversations instead of the
+  first-created agent capturing the session forever. One-time effect on upgrade: previously
+  persisted sessions (`sessions.json`) no longer match and those conversations start fresh.
+
 ## [0.2.0] - 2026-07-10
 
 ### Added
