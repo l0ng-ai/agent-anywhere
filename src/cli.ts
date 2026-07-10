@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name('agent-anywhere')
   .description('Gateway that connects IM platforms to coding agents: messaging via Koishi, handled over ACP')
-  .version('0.1.0')
+  .version('0.2.0')
   // Global: pick a specific config file (e.g. one per platform). Default is ~/.config/agent-anywhere/config.yaml.
   // We stash it on process.env so it's inherited by the spawned agent — its reverse commands then resolve
   // the same config/socket. Only one daemon runs at a time, so the socket sits next to the chosen file.

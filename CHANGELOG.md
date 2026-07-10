@@ -3,7 +3,27 @@
 All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-10
+
+### Added
+- **Config reference for agents** (`skill/references/config.md`): a complete, schema-accurate
+  reference for `config.yaml` (per-platform credentials, routing, session scopes, `access.allowFrom`,
+  and what is deliberately not configurable), so an agent can safely edit the gateway config when
+  asked from inside the chat.
+- **README "Agent skill" section** with a one-line install via
+  [vercel-labs/skills](https://github.com/vercel-labs/skills):
+  `npx skills add https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g`.
+
+### Changed
+- **Bundled skill rewritten** against the actual implementation: per-command output contracts
+  (`messageId` returns, TOON examples, `count: 0` empty state), platform capability fallbacks
+  (`reply` degrades to a plain send; `edit-message`/`create-thread`/`ask` fail with
+  `unsupported operation`), error handling (`error:`/`help:` on stdout), and a new
+  gateway-diagnostics section (`doctor`, config editing, why the agent must never restart
+  the daemon it runs inside).
+- README reordered install-first: Features → Quick start → Agent skill → Platforms → Configuration.
+
+## [0.1.0] - 2026-07-10
 
 ### Changed (design)
 - **Removed the per-agent `permission` policy.** The daemon is a headless ACP client and now
