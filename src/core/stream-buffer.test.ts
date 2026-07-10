@@ -728,6 +728,33 @@ describe('StreamBuffer noEdit mode', () => {
     expect(sink.sends[0]).not.toContain(opts.cursor);
   });
 
+  it('with cursor:"" (production setting), complete() still sends — mid-stream no-op flushes must not mark the text as delivered', async () => {
+    // Regression: turn-runner passes cursor:'' — the streaming and final renders are then
+    // IDENTICAL. The degraded mid-stream branch used to advance lastRenderedBody without
+    // sending, so the final flush saw "unchanged" and skipped the whole-send: noEdit
+    // platforms (DingTalk/QQ/LINE/WeCom) never delivered any reply. (The '▌' cursor in the
+    // other tests masked this by making the renders differ.)
+    const sink = makeSink();
+    const opts = makeOpts({ charThreshold: 2, cursor: '', noEdit: true });
+    const buf = new StreamBuffer(opts, sink);
+
+    buf.push('hello'); // crosses charThreshold → triggers a mid-stream (no-op) flush
+    await Promise.resolve();
+    await Promise.resolve();
+    buf.push(' world'); // and again
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sink.sends.length).toBe(0); // nothing mid-stream, per noEdit design
+
+    await buf.complete(); // no footer: final render === mid-stream render
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sink.sends.length).toBe(1);
+    expect(sink.sends[0]).toBe('hello world');
+    expect(sink.edits.length).toBe(0);
+  });
+
   it('under noEdit, overlong text on complete() still splits via splitIntoChunks into multiple messages', async () => {
     const sink = makeSink();
     const opts = makeOpts({ charThreshold: 2, noEdit: true, maxMessageLength: 20 });

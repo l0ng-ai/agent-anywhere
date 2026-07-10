@@ -190,9 +190,11 @@ export class StreamBuffer {
       if (final) {
         await this.degradedFinalFlush(chunks);
         this.lastRenderedBody = rendered;
-      } else {
-        this.lastRenderedBody = rendered;
       }
+      // Non-final: nothing is written here, so lastRenderedBody must NOT advance —
+      // it records what was actually delivered. Advancing it made the final flush
+      // see rendered === lastRenderedBody and skip the whole-send entirely, so
+      // noEdit platforms (DingTalk/QQ/LINE/WeCom) never delivered any reply.
       return;
     }
 

@@ -28,6 +28,13 @@ All notable changes to this project are documented here. The format is based on
   and `ask` is unavailable on this platform.
 
 ### Fixed
+- **noEdit platforms never delivered any reply** (DingTalk/QQ/LINE/WeCom — every platform without
+  in-place message editing): the StreamBuffer's degraded path recorded mid-stream accumulations as
+  "already delivered" without sending them, so the end-of-turn whole-send was skipped as
+  "unchanged" and the agent's reply silently vanished. Masked in tests by the old non-empty
+  streaming cursor (production streams with `cursor: ''`, making the mid-stream and final renders
+  identical). The agent replied every time — the buffer just never flushed it.
+
 - **`harness: codex` actually works now**: it spawned `codex acp`, but the codex CLI has no such
   subcommand — "acp" fell into the TUI, which dies headless with "stdin is not a terminal", so
   every turn failed with "ACP connection closed". The harness now spawns Zed's
