@@ -42,6 +42,8 @@ function harnessCommand(def: import('../config/schema.js').AgentDef): string {
       return 'gemini';
     case 'codex':
       return 'codex-acp';
+    case 'opencode':
+      return 'opencode';
     case 'custom':
       return def.command ?? '(custom harness: no command configured)';
   }

@@ -10,7 +10,7 @@
 </div>
 
 Agent Anywhere is a gateway daemon that puts a coding agent — Claude Code,
-Gemini CLI, Codex, or anything speaking the
+Gemini CLI, Codex, OpenCode, or anything speaking the
 [Agent Client Protocol](https://agentclientprotocol.com) — behind your chat
 bots. DM it on Telegram or @-mention it on Discord: the agent runs with full
 tool access on your machine and streams its answer into a single message that
@@ -99,7 +99,7 @@ platforms:                    # named instances; the key is the instance id
 
 agents:                       # at least one; routing picks by id
   - id: claude
-    harness: claude           # claude|gemini|codex|custom
+    harness: claude           # claude|gemini|codex|opencode|custom
     cwd: ~/projects/main
   - id: codex
     harness: codex

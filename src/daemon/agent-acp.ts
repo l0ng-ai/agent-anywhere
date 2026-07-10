@@ -129,6 +129,9 @@ function resolveHarness(def: AgentDef): { command: string; args: string[] } {
       // `codex acp` falls into the TUI and dies with "stdin is not a terminal" when headless).
       // Auth reuses the codex CLI's own login state (~/.codex).
       return { command: resolveCodexAdapterEntry(), args: [...def.args] };
+    case 'opencode':
+      // OpenCode native ACP mode (per the ACP registry's official launch spec: `opencode acp`).
+      return { command: 'opencode', args: ['acp', ...def.args] };
     case 'custom':
       // refine already guarantees command exists.
       return { command: def.command!, args: [...def.args] };

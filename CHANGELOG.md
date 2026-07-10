@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format is based on
   acked with a usage hint instead of starting an empty turn. Commands matching no rule still
   pass through to the agent untouched (`/model` etc. keep working).
 
+- **`harness: opencode` preset**: OpenCode via its native ACP mode (`opencode acp`, per the
+  ACP registry's official launch spec). Requires the opencode CLI on PATH; auth reuses its
+  own login state.
+
 ### Fixed
 - **`harness: codex` actually works now**: it spawned `codex acp`, but the codex CLI has no such
   subcommand — "acp" fell into the TUI, which dies headless with "stdin is not a terminal", so

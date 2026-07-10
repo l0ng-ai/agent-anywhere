@@ -128,7 +128,7 @@ DMs always get a response regardless of `requireMention` (frozen behavior).
 
 ```yaml
 - id: claude            # unique; referenced by routing
-  harness: claude       # claude | gemini | codex | custom
+  harness: claude       # claude | gemini | codex | opencode | custom
   command: /path/bin    # required only when harness: custom (any ACP-speaking executable)
   args: []              # extra CLI args appended to the harness command
                         # (harness-specific switches go here, e.g. claude's --setting-sources)
