@@ -1,46 +1,49 @@
 <div align="center">
 
-### Agent Anywhere
+# Agent Anywhere
 
 **Your coding agent, in every chat app.**
 
 [![CI](https://github.com/l0ng-ai/agent-anywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/l0ng-ai/agent-anywhere/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/agent-anywhere-cli)](https://www.npmjs.com/package/agent-anywhere-cli)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+English | [简体中文](README.zh-CN.md)
 
 </div>
 
-Agent Anywhere is a gateway daemon that puts a coding agent — Claude Code,
-Codex, OpenCode, or anything speaking the
-[Agent Client Protocol](https://agentclientprotocol.com) — behind your chat
-bots. DM it on Telegram or @-mention it on Discord: the agent runs with full
-tool access on your machine and streams its answer into a single message that
-edits in place.
+A gateway daemon that connects chat platforms to any coding agent speaking the
+[Agent Client Protocol](https://agentclientprotocol.com) — Claude Code, Codex,
+OpenCode. Message the bot; the agent runs on your machine and
+streams its answer into a single, live-edited message.
 
 ## Features
 
-- **Eight platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom, DingTalk; any number of instances (multi-account included) from one config file.
-- **Any ACP agent, per-message routing** — define several agents (harness, model, cwd) and route by platform, server, channel, user, or slash command.
-- **Native-feeling streaming** — throttled in-place edits, live tool-call bubbles, burst merging, interrupt-on-new-message; platforms without editing fall back to chunked sends measured in rendered length.
-- **The agent acts in the chat** — over a local socket it sends files, reacts, replies, opens threads, and asks blocking button questions (`agent-anywhere ask`), never touching a channel id.
-- **Small config** — five sections, typed per-platform credentials, `${VAR}` and `.env` expansion; experience tuning is frozen in code.
+- **Eight platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom, DingTalk; multi-account supported.
+- **Any ACP agent** — presets for Claude Code, Codex, and OpenCode, plus `custom`; route by platform, channel, user, or slash command.
+- **Native streaming** — in-place edits, live tool-call bubbles, lifecycle reactions, interrupt on new message.
+- **Chat actions** — the agent sends files, reacts, replies, opens threads, reads history, asks button questions.
+- **Attachments** — inbound images and files are downloaded and handed to the agent.
+- **Persistent sessions** — survive restarts; reset via `/new`; scoped per thread, channel, user, or globally.
+- **Small config** — five sections, typed credentials, `${VAR}` and `.env` expansion.
 
 ## Quick start
 
 ```bash
 npm install -g agent-anywhere-cli
 
-agent-anywhere setup    # wizard: pick platform, paste credentials, choose the agent
-agent-anywhere doctor   # self-check: config / credentials / ACP SDK / harness
-agent-anywhere start    # start the daemon — now message your bot
+agent-anywhere setup    # wizard: platform, credentials, agent
+agent-anywhere doctor   # self-check
+agent-anywhere start    # message your bot
 ```
 
-Authentication belongs to the agent, not the gateway: `harness: claude` reuses
-this machine's `claude /login` session by default — log in once, no API key.
-(Fine for personal use under the ToS; a multi-user service requires an API key.)
+`harness: claude` reuses this machine's `claude /login` session — no API key
+needed for personal use.
 
-### Or let your agent set it up
+<details>
+<summary><strong>Or let your agent set it up</strong></summary>
 
-Paste this into Claude Code (or any coding agent):
+Paste into Claude Code (or any coding agent):
 
 ```text
 Set up https://github.com/l0ng-ai/agent-anywhere for me: install the CLI
@@ -49,60 +52,11 @@ https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g), then follow
 the skill to configure and start it.
 ```
 
-## Agent skill
-
-The daemon already injects a one-line hint each turn so any agent can discover
-the reverse commands. For the full playbook — sending files, threads, blocking
-button questions (`ask`), reading history, and safely editing the gateway
-config from inside the chat — install the bundled
-[skill](skill/SKILL.md) into your agent with
-[skills](https://github.com/vercel-labs/skills):
-
-```bash
-npx skills add https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g
-```
-
-`-g` installs it user-wide (recommended — the agent's working directory is set
-per agent in `agents[].cwd`); drop it to install into the current project only.
-The skill also ships inside the npm package (`agent-anywhere-cli/skill/`) if
-you prefer to copy it manually.
-
-## Agents
-
-| Harness | Launches | Extra install | Auth |
-|---|---|---|---|
-| `claude` | bundled [claude-agent-acp](https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp) adapter | none — ships with the package | reuses `claude /login`; `ANTHROPIC_API_KEY` if set |
-| `codex` | bundled [codex-acp](https://www.npmjs.com/package/@zed-industries/codex-acp) adapter | none — ships with the package | reuses the Codex CLI's login (`~/.codex`) |
-| `opencode` | `opencode acp` | OpenCode CLI on PATH | OpenCode's own login |
-| `custom` | your `command` + `args` | any ACP-speaking executable | whatever your agent uses |
-
-Every harness gets the same treatment: per-agent `cwd`, `env`, and `args`
-(harness-specific switches go in `args`); `model` is passed best-effort at
-session creation — whether it takes effect depends on the harness. Optional
-ACP capabilities degrade per agent: sessions persist across daemon restarts
-where the adapter supports `session/load`, and agents that advertise their
-slash commands (`available_commands_update`) get them registered as native
-platform commands. `agent-anywhere doctor` verifies each configured harness is
-reachable and reports the auth method in use.
-
-## Platforms
-
-| | Discord | Telegram | Slack | Lark | QQ | LINE | WeCom | DingTalk |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Streaming in-place edit | ✓ | ✓ | ✓ | ✓ | – | – | – | – |
-| Lifecycle reactions | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – |
-| Typing indicator | ✓ | ✓ | – | – | – | ✓ | – | – |
-| Native reply | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
-| Threads / auto-thread | ✓ | ✓ | ✓ | – | – | – | – | – |
-| Buttons (`ask`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
-| Slash commands | ✓ | ✓ | ✓ | – | – | – | – | – |
-
-Outbound markdown is rendered per platform (Telegram entities, Slack mrkdwn,
-DingTalk markdown subset, plain-text flattening for LINE/WeCom); missing
-capabilities degrade honestly. DingTalk connects via Stream mode by default —
-like Slack/Lark ws mode, no public callback URL is needed.
+</details>
 
 ## Configuration
+
+`~/.config/agent-anywhere/config.yaml`, or `--config <path>`:
 
 ```yaml
 version: 1
@@ -129,8 +83,8 @@ routing:
   pipeline:                   # ordered; first match wins
     - when: { platform: telegram-bot }
       use: { agent: codex }
-    - when: { command: codex } # "/codex fix the tests" reaches the codex agent as "fix the tests";
-      use: { agent: codex }    # plain text parsing — works on every platform, native slash or not
+    - when: { command: codex } # "/codex fix the tests" → codex agent
+      use: { agent: codex }
 
 session:
   scope: per_channel          # per_thread|per_channel|per_user|shared
@@ -139,18 +93,77 @@ access:
   allowFrom: ["discord-main:123456"]   # <instanceId>:userId; empty = anyone
 ```
 
-Credentials are typed and validated per platform
-(`src/platform/config-schemas.ts`). `${VAR}` expands from the environment plus
-a `<configDir>/.env` sidecar, so the YAML can be committed. For several
-deployments, keep one file per deployment and pick it with `--config <path>`.
+`${VAR}` expands from the environment plus a `<configDir>/.env` sidecar, so
+the YAML can be committed.
 
-Conversation context is persistent: it survives daemon restarts (sessions are
-resumed via ACP `session/load`) and is cleared only when the user sends `/new`
-or `/clear` in the chat.
+> [!WARNING]
+> Agents run with full tool access. An empty `access.allowFrom` lets anyone
+> who can message the bot run commands on your machine — fill it in any
+> shared deployment.
 
-> **Security:** agents run with full tool access — an empty `access.allowFrom`
-> means anyone who can message the bot can drive Bash on your machine. Fill the
-> allowlist in any shared deployment.
+## Agents
+
+| Harness | Launches | Extra install | Auth |
+|---|---|---|---|
+| `claude` | bundled [claude-agent-acp](https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp) | none | `claude /login` or `ANTHROPIC_API_KEY` |
+| `codex` | bundled [codex-acp](https://www.npmjs.com/package/@zed-industries/codex-acp) | none | Codex CLI's login |
+| `opencode` | `opencode acp` | OpenCode CLI | OpenCode's login |
+| `custom` | your `command` + `args` | any ACP executable | your agent's |
+
+Each agent takes `cwd`, `env`, `args`, and a best-effort `model`. Sessions
+persist where the agent supports `session/load`; advertised slash commands
+become native platform commands. `doctor` verifies every configured harness.
+
+## Platforms
+
+| | Discord | Telegram | Slack | Lark | QQ | LINE | WeCom | DingTalk |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Streaming in-place edit | ✓ | ✓ | ✓ | ✓ | – | – | – | – |
+| Lifecycle reactions | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – |
+| Typing indicator | ✓ | ✓ | – | – | – | ✓ | – | – |
+| Native reply | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
+| Threads / auto-thread | ✓ | ✓ | ✓ | – | – | – | – | – |
+| Buttons (`ask`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – |
+| Slash commands | ✓ | ✓ | ✓ | – | – | – | – | – |
+
+Markdown is rendered per platform; missing capabilities degrade gracefully (no
+editing → chunked sends, no buttons → plain-text question). Slack, Lark, and
+DingTalk connect over WebSocket by default — no public callback URL needed.
+
+## Acting in the chat
+
+Plain text streams back automatically. For everything else, the agent invokes
+the same CLI; commands target the current conversation by default:
+
+```bash
+agent-anywhere send-file ./report.pdf --caption "Q3 numbers"
+agent-anywhere react <messageId> <emoji>
+agent-anywhere fetch-messages --limit 20
+agent-anywhere create-thread <messageId> "debug session"
+agent-anywhere ask "Deploy to production?" -o Deploy -o "Dry run" -o Cancel
+```
+
+`ask` blocks until the user taps a button and prints the chosen label. Also:
+`send-message`, `reply`, `edit-message`, `delete`.
+
+A per-turn hint lets any agent discover these commands; the bundled
+[skill](skill/SKILL.md) provides the full playbook:
+
+```bash
+npx skills add https://github.com/l0ng-ai/agent-anywhere/tree/main/skill -g
+```
+
+## CLI
+
+| Command | |
+|---|---|
+| `setup` | configuration wizard |
+| `doctor` | self-check (default); `--migrate-config` upgrades v0 files |
+| `start` | run the daemon |
+| `<reverse-command>` | chat actions for the agent (above) |
+
+All commands accept `-c, --config <path>` and print structured output to
+stdout.
 
 ## License
 
