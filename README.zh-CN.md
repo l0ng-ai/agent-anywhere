@@ -17,6 +17,17 @@
 Code、Codex、OpenCode。给机器人发消息，智能体在你自己的机器上运行，
 回答以流式写入同一条消息、原地编辑。
 
+```text
+ Discord ───┐
+ Telegram ──┤     ┌──────────────────────┐
+ Slack ─────┤     │        daemon        │       ┌─► claude
+ Lark ──────┼────►│  routing · sessions  │◄─ACP─►├─► codex
+ QQ ────────┤     │  streaming · access  │       ├─► opencode
+ LINE ──────┤     └──────────▲───────────┘       └─► custom
+ WeCom ─────┤                │ unix socket
+ DingTalk ──┘                └─ agent-anywhere CLI (send-file / ask / react …)
+```
+
 ## 特性
 
 - **八个平台，一个进程** —— Discord、Telegram、Slack、飞书、QQ、LINE、企业微信、钉钉；支持多账号。

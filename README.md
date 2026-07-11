@@ -17,6 +17,17 @@ A gateway daemon that connects chat platforms to any coding agent speaking the
 OpenCode. Message the bot; the agent runs on your machine and
 streams its answer into a single, live-edited message.
 
+```text
+ Discord ───┐
+ Telegram ──┤     ┌──────────────────────┐
+ Slack ─────┤     │        daemon        │       ┌─► claude
+ Lark ──────┼────►│  routing · sessions  │◄─ACP─►├─► codex
+ QQ ────────┤     │  streaming · access  │       ├─► opencode
+ LINE ──────┤     └──────────▲───────────┘       └─► custom
+ WeCom ─────┤                │ unix socket
+ DingTalk ──┘                └─ agent-anywhere CLI (send-file / ask / react …)
+```
+
 ## Features
 
 - **Eight platforms, one daemon** — Discord, Telegram, Slack, Lark, QQ, LINE, WeCom, DingTalk; multi-account supported.
