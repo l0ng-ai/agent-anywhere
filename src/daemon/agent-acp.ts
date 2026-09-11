@@ -479,7 +479,7 @@ function createAcpSession(
  * Non-blocking drain of last-turn residue from the SDK updates queue, before this turn's prompt.
  *
  * Can't probe with `nextUpdate()`: the SDK's AsyncQueue.next() pushes a waiter when the queue is empty
- * (0.29.0 dist/acp.js AsyncQueue.next); if Promise.race loses, that waiter lingers and steals this turn's
+ * (1.4.0 dist/acp.js AsyncQueue.next); if Promise.race loses, that waiter lingers and steals this turn's
  * real first update — eating content. The SDK exposes no peek/poll either. So synchronously read the
  * queue's internal `values` array (ActiveSession's private `updates`): only items already in the queue
  * now are visible (pure sync, no await, can't see this turn's not-yet-sent prompt update), and clearing

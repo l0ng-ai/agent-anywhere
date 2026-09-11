@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "license": "MIT",
   "comments": {
-    "pinnedDeps": "@satorijs/adapter-slack and @satorijs/core are pinned to exact versions: the Slack profile relies on their undocumented internal behavior (see the header comment in src/platform/profiles/slack.ts). Before upgrading either, you must manually regress Slack button/slash reception—no CI covers this path."
+    "pinnedDeps": "@satorijs/adapter-slack and @satorijs/core are pinned to exact versions: the Slack profile relies on their undocumented internal behavior (see the header comment in src/platform/profiles/slack.ts). Before upgrading either, you must manually regress Slack button/slash reception—no CI covers this path. @agentclientprotocol/sdk is pinned for the same reason: agent-acp.ts reaches into two non-public shapes—AsyncQueue.values (drainResidualUpdates) and ClientContext.attachSession (session resume). Both are cast through unknown, so typecheck cannot catch their removal; after upgrading, re-verify the initialize + session/new handshake and that agentCapabilities still reports loadSession."
   },
   "description": "A gateway CLI that connects Claude Code to IM platforms: Koishi for inbound/outbound + claude agent sdk for processing, with streaming replies aligned to the hermes experience",
   "type": "module",
@@ -27,8 +27,8 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.58.1",
-    "@agentclientprotocol/sdk": "0.29.0",
+    "@agentclientprotocol/claude-agent-acp": "^0.76.0",
+    "@agentclientprotocol/sdk": "1.4.0",
     "@cordisjs/plugin-http": "^0.6.0",
     "@inquirer/prompts": "^7.0.0",
     "@koishijs/plugin-adapter-discord": "^4.0.0",

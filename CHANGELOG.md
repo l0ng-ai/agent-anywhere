@@ -28,6 +28,14 @@ All notable changes to this project are documented here. The format is based on
   and `ask` is unavailable on this platform.
 
 ### Fixed
+- **Long replies were truncated at the first chunk boundary** (Discord: 2000 chars): dense
+  streaming edits hit the platform's per-message edit rate limit, and three consecutive failures
+  degrade the StreamBuffer. The degraded finish then edited the primary message to chunk 1 and
+  returned, silently dropping chunks 2..N — the daemon's sink provides no `delete()`, so every
+  degradation landed on that path. The tail chunks are now sent, including when the primary edit
+  itself fails. The primary is also no longer re-edited with identical content once the body
+  outgrows one chunk, which is what burned the edit quota that caused the degradation.
+
 - **noEdit platforms never delivered any reply** (DingTalk/QQ/LINE/WeCom — every platform without
   in-place message editing): the StreamBuffer's degraded path recorded mid-stream accumulations as
   "already delivered" without sending them, so the end-of-turn whole-send was skipped as
@@ -42,6 +50,11 @@ All notable changes to this project are documented here. The format is based on
   dependency, platform binary resolved directly); auth reuses the codex CLI's own login state.
 
 ### Changed
+- **Claude harness upgraded to `@agentclientprotocol/claude-agent-acp` 0.76.0** (from 0.58.1),
+  with `@agentclientprotocol/sdk` 1.4.0 (from 0.29.0). ACP protocol version is unchanged (1) and
+  the handshake was re-verified end to end: `initialize` + `session/new` succeed and
+  `agentCapabilities.loadSession` is still advertised, so persisted session resume keeps working.
+
 - **Session keys are agent-qualified** (`<agentId>:<platform>:c:<channelId>` …): two agents
   addressed in the same channel/user/thread scope keep separate conversations instead of the
   first-created agent capturing the session forever. One-time effect on upgrade: previously
