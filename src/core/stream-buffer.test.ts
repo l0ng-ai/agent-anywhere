@@ -411,6 +411,66 @@ describe('StreamBuffer dual-trigger and degradation', () => {
     expect(sink.sends[sink.sends.length - 1]).not.toContain(opts.cursor);
   });
 
+  it('degraded + no sink.delete: overlong text still delivers every chunk, not just the head', async () => {
+    // Regression: the strip-cursor fallback edited the primary to chunk 1 and stopped,
+    // so any degraded reply longer than maxMessageLength was silently truncated at the
+    // first chunk boundary. A handful of edit rate-limits is all it takes to degrade.
+    const sink = makeSink({ withDelete: false }); // strip-cursor fallback path
+    const opts = makeOpts({ charThreshold: 2, maxFailuresBeforeFallback: 3, maxMessageLength: 200 });
+    const buf = new StreamBuffer(opts, sink);
+
+    await driveIntoDegraded(buf, sink, 3);
+    sink.failEdits(0); // rate limit lifts before the final flush
+
+    const body = Array.from({ length: 40 }, (_, i) => `line-${i} padding padding`).join('\n');
+    buf.push(body);
+    await buf.complete();
+    await Promise.resolve();
+
+    const delivered = [sink.edits[sink.edits.length - 1]!.text, ...sink.sends.slice(1)].join('\n');
+    expect(sink.sends.length).toBeGreaterThan(1); // tail chunks actually went out
+    for (let i = 0; i < 40; i++) expect(delivered).toContain(`line-${i} padding`);
+  });
+
+  it('degraded + no delete + failing final edit: the tail chunks are still sent', async () => {
+    // Losing chunk 1 to a failed edit is no reason to drop chunks 2..N.
+    const sink = makeSink({ withDelete: false });
+    const opts = makeOpts({ charThreshold: 2, maxFailuresBeforeFallback: 3, maxMessageLength: 200 });
+    const buf = new StreamBuffer(opts, sink);
+
+    await driveIntoDegraded(buf, sink, 3);
+    sink.failEdits(99); // still rate-limited at final flush
+
+    buf.push(Array.from({ length: 40 }, (_, i) => `line-${i} padding padding`).join('\n'));
+    await buf.complete();
+    await Promise.resolve();
+
+    expect(sink.edits.length).toBe(0);
+    expect(sink.sends.length).toBeGreaterThan(1);
+    expect(sink.sends[sink.sends.length - 1]!).toContain('line-39');
+  });
+
+  it('mid-stream: the primary is not re-edited once the body outgrows the head chunk', async () => {
+    // The head chunk stops changing while the body keeps growing; re-editing it to
+    // identical content burned the platform edit quota and degraded the buffer.
+    const sink = makeSink();
+    const opts = makeOpts({ charThreshold: 2, cursor: '', maxMessageLength: 120 });
+    const buf = new StreamBuffer(opts, sink);
+
+    buf.push(Array.from({ length: 12 }, (_, i) => `alpha-${i} bravo charlie`).join('\n'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const editsAfterOverflow = sink.edits.length;
+    for (let k = 0; k < 5; k++) {
+      sink.setNow(sink.now() + 100000);
+      buf.push(`\ndelta-${k} echo foxtrot golf hotel india juliet kilo lima mike`);
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+    expect(sink.edits.length).toBe(editsAfterOverflow); // no redundant head rewrites
+  });
+
   it('complete() after degradation: deletes the frozen preview and whole-sends the full text, no cursor remnant', async () => {
     const sink = makeSink({ withDelete: true });
     const opts = makeOpts({ charThreshold: 2, maxFailuresBeforeFallback: 3 });

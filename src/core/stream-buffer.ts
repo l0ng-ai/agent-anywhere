@@ -63,6 +63,7 @@ export class StreamBuffer {
   private cancelTimer: (() => void) | null = null;
   private aborted = false;          // no more output once the turn is interrupted
   private overflowSent = false;     // whether final overflow chunks (2..N) were sent (guards against duplicates)
+  private lastPrimaryText = '';     // last text actually written to the primary message (chunk 1 only)
   // Serialize flushes: chain each onto the previous so complete()'s final flush
   // runs only after any in-flight flush settles, instead of being dropped by a
   // re-entrancy guard during that in-flight flush.
@@ -203,11 +204,18 @@ export class StreamBuffer {
       // When unchanged we're here only to emit final overflow chunks.
       const head = chunks[0];
       if (this.aborted || head === undefined) return;
+      // Compare against the PRIMARY's own last text, not the full body: once the
+      // body outgrows one chunk the head stops changing while the body keeps
+      // growing, and editing the primary to identical content on every flush
+      // burned the platform's edit rate limit for nothing (which then degrades
+      // the buffer and costs the tail chunks).
       if (!unchanged || !this.primaryRef) {
         if (!this.primaryRef) {
           this.primaryRef = await this.sink.send(head);
-        } else {
+          this.lastPrimaryText = head;
+        } else if (head !== this.lastPrimaryText) {
           await this.sink.edit(this.primaryRef, head);
+          this.lastPrimaryText = head;
         }
       }
       // Overflow chunks are appended on final only (no edit storm mid-stream), once.
@@ -264,6 +272,7 @@ export class StreamBuffer {
       }
       if (this.aborted) return;
       await this.sendChunks(chunks);
+      this.overflowSent = true;
       return;
     }
 
@@ -272,17 +281,26 @@ export class StreamBuffer {
   }
 
   /**
-   * Fallback: edit primary in place to the cursor-stripped first chunk and treat
-   * the edited primary as the final content (no whole-send, avoids duplication).
-   * Best-effort: edit errors are swallowed.
+   * Fallback: edit primary in place to the cursor-stripped first chunk, then send
+   * the remaining chunks (2..N) as follow-up messages.
+   *
+   * The tail send is NOT optional: the primary can only ever hold chunk 1, so
+   * stopping after the edit silently truncated every degraded reply longer than
+   * maxMessageLength at the first chunk boundary (a few edit rate-limits mid-stream
+   * are enough to degrade a long reply, which is how it showed up in practice).
+   * The edit failing does not skip the tail either — a lost chunk 1 is no reason
+   * to drop 2..N. Best-effort throughout: errors are swallowed, never thrown.
    */
   private async stripCursorFallback(chunks: string[]): Promise<void> {
     if (this.aborted || !this.primaryRef || chunks[0] === undefined) return;
     try {
       await this.sink.edit(this.primaryRef, chunks[0]);
     } catch {
-      // best-effort: stop here, never throw.
+      // best-effort: chunk 1 may be lost, but the tail below still goes out.
     }
+    if (this.overflowSent) return;
+    await this.sendChunks(chunks.slice(1));
+    this.overflowSent = true;
   }
 
   /** Best-effort sequential chunk send; any error swallowed, flushChain stays clean. */
