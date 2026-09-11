@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-11
+
 ### Added
 - **Text command routing**: `routing.pipeline` rules with `when.command` now match the leading
   `/name` of plain message text, so command routing works on every platform — no native
