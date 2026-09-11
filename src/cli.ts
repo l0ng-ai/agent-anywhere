@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import { encode } from '@toon-format/toon';
 import { runSetup } from './commands/setup.js';
@@ -10,11 +11,17 @@ import { REVERSE_COMMANDS, CHANNEL_OPTION } from './ipc/commands.js';
 // lazy-loaded to keep --help / setup / doctor / reverse commands lightweight to start.
 const runStart = () => import('./commands/start.js').then((m) => m.runStart());
 
+// Read the version from package.json instead of hardcoding it: `npm version` only rewrites
+// package.json, so a literal here silently drifts and ships a wrong `--version` (0.3.0 went out
+// still reporting 0.2.0). Resolved relative to this module, so it works from dist/ and from
+// tsx-run src/ alike; package.json is always in the published tarball.
+const VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
+
 const program = new Command();
 program
   .name('agent-anywhere')
   .description('Gateway that connects IM platforms to coding agents: messaging via Koishi, handled over ACP')
-  .version('0.2.0')
+  .version(VERSION)
   // Global: pick a specific config file (e.g. one per platform). Default is ~/.config/agent-anywhere/config.yaml.
   // We stash it on process.env so it's inherited by the spawned agent — its reverse commands then resolve
   // the same config/socket. Only one daemon runs at a time, so the socket sits next to the chosen file.

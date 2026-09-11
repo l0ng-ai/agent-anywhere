@@ -5,6 +5,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-11
+
+### Fixed
+- **`agent-anywhere --version` reported the wrong version**: the number was a string literal in
+  `cli.ts`, but `npm version` only rewrites `package.json`, so 0.3.0 shipped still announcing
+  0.2.0. The version is now read from `package.json` at startup and can no longer drift.
+
+
 ## [0.3.0] - 2026-09-11
 
 ### Added
